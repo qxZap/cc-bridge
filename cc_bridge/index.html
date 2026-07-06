@@ -110,7 +110,9 @@ details.tool pre{margin:0;padding:10px 12px;border-top:1px solid var(--tool-line
 .composer{display:flex;align-items:flex-end;gap:8px;padding:10px 12px;
   padding-bottom:max(10px,env(safe-area-inset-bottom));border-top:1px solid var(--line);background:var(--bg)}
 #in{flex:1;background:var(--surface);color:var(--text);border:1px solid var(--line);border-radius:15px;
-  padding:11px 14px;resize:none;font:inherit;font-size:16px;outline:0;max-height:140px;box-shadow:var(--shadow)}
+  padding:11px 14px;resize:none;font:inherit;font-size:16px;outline:0;max-height:140px;box-shadow:var(--shadow);
+  scrollbar-width:none;-ms-overflow-style:none}
+#in::-webkit-scrollbar{width:0;height:0;display:none}
 #in:focus{border-color:color-mix(in srgb,var(--accent) 55%,var(--line))}
 .circle{width:44px;height:44px;border-radius:50%;flex:none;display:grid;place-items:center;color:#fff}
 #send{background:var(--accent)}#send:disabled{opacity:.45}
