@@ -20,6 +20,7 @@ import argparse
 import glob
 import json
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -103,6 +104,91 @@ def session_meta(path, mtime):
     return meta
 
 
+# ---- project logo ----------------------------------------------------------
+# A project can give its chats an avatar via a marker in its AGENTS.md:
+#   <!-- logo: assets/logo.png -->   (path relative to AGENTS.md, an http(s)
+#   URL, or an emoji as a fallback). Local image files are served at /api/logo.
+# AGENTS.md is looked up cheaply: cwd, then up the parent chain, then one level
+# down (nested sub-projects). Cached per cwd; re-reads on mtime change.
+_LOGO = {}   # cwd -> (agents_path|None, mtime, resolved)   resolved: (kind, value)|None
+LOGO_RE = re.compile(r"<!--\s*logo:\s*(.+?)\s*-->", re.I)
+_LOGO_SKIP = {".git", "node_modules", "__pycache__", ".venv", "venv", "env",
+              "dist", "build", ".next", ".cache", "target", "vendor"}
+IMG_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".ico"}
+IMG_CTYPE = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+             ".gif": "image/gif", ".webp": "image/webp",
+             ".svg": "image/svg+xml", ".ico": "image/x-icon"}
+
+
+def _find_agents(cwd):
+    p = os.path.join(cwd, "AGENTS.md")
+    if os.path.isfile(p):
+        return p
+    d = cwd                                     # up the parent chain (repo root)
+    for _ in range(6):
+        parent = os.path.dirname(d)
+        if parent == d:
+            break
+        d = parent
+        p = os.path.join(d, "AGENTS.md")
+        if os.path.isfile(p):
+            return p
+    try:                                        # one level down (sub-projects)
+        for name in sorted(os.listdir(cwd)):
+            if name in _LOGO_SKIP or name.startswith("."):
+                continue
+            sub = os.path.join(cwd, name)
+            p = os.path.join(sub, "AGENTS.md")
+            if os.path.isdir(sub) and os.path.isfile(p):
+                return p
+    except OSError:
+        pass
+    return None
+
+
+def _resolve_logo(agents_path):
+    try:
+        head = open(agents_path, "r", encoding="utf-8", errors="replace").read(6000)
+    except Exception:
+        return None
+    m = LOGO_RE.search(head)
+    if not m:
+        return None
+    raw = m.group(1).strip()
+    if raw.startswith("http://") or raw.startswith("https://"):
+        return ("url", raw)
+    base = os.path.dirname(agents_path)
+    p = os.path.normpath(raw if os.path.isabs(raw) else os.path.join(base, raw))
+    if os.path.splitext(p)[1].lower() in IMG_EXTS and os.path.isfile(p):
+        return ("file", p)
+    return ("txt", raw[:24])                     # emoji / short text fallback
+
+
+def project_logo(cwd):
+    if not cwd or not os.path.isdir(cwd):
+        return None
+    cached = _LOGO.get(cwd)
+    if cached:
+        path, mtime, resolved = cached
+        if path is None:
+            return resolved                      # negative cached — restart to rescan
+        try:
+            if os.path.getmtime(path) == mtime:
+                return resolved
+        except OSError:
+            pass                                 # gone — re-resolve
+    path = _find_agents(cwd)
+    resolved = _resolve_logo(path) if path else None
+    mtime = 0
+    if path:
+        try:
+            mtime = os.path.getmtime(path)
+        except OSError:
+            path = None
+    _LOGO[cwd] = (path, mtime, resolved)
+    return resolved
+
+
 def list_sessions():
     # cheap mtime sort first; only read (cache-miss) transcripts for the top N.
     paths = [(os.path.getmtime(p), p) for p in session_files()]
@@ -113,9 +199,19 @@ def list_sessions():
     for mtime, p in paths[:40]:
         try:
             sid, cwd, title, ctx, win = session_meta(p, mtime)
+            lg = project_logo(cwd)
+            if lg and lg[0] == "file":
+                logo = {"img": "/api/logo?id=" + sid}
+            elif lg and lg[0] == "url":
+                logo = {"img": lg[1]}
+            elif lg and lg[0] == "txt":
+                logo = {"txt": lg[1]}
+            else:
+                logo = None
             rows.append({"id": sid, "cwd": cwd or "?", "title": title,
                          "mtime": mtime, "running": sid in running,
-                         "ctx": ctx, "ctxpct": round(100 * ctx / win) if win else 0})
+                         "ctx": ctx, "ctxpct": round(100 * ctx / win) if win else 0,
+                         "logo": logo})
         except Exception:
             continue
     return rows
@@ -286,8 +382,24 @@ class H(BaseHTTPRequestHandler):
             self._json({"total": total, "start": start, "messages": msgs[start:]})
         elif u.path == "/api/stream":
             self._sse(parse_qs(u.query).get("id", [""])[0])
+        elif u.path == "/api/logo":
+            self._logo(parse_qs(u.query).get("id", [""])[0])
         else:
             self._json({"error": "not found"}, 404)
+
+    def _logo(self, sid):
+        cwd = session_cwd(sid)
+        lg = project_logo(cwd) if cwd else None
+        if not lg or lg[0] != "file":
+            return self._json({"error": "no logo"}, 404)
+        ctype = IMG_CTYPE.get(os.path.splitext(lg[1])[1].lower())
+        if not ctype:
+            return self._json({"error": "bad type"}, 404)
+        try:
+            data = open(lg[1], "rb").read()
+        except Exception:
+            return self._json({"error": "read failed"}, 404)
+        self._send(data, ctype)
 
     def _sse(self, sid):
         # Server-Sent Events: a held connection = "a viewer is reading this chat."

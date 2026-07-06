@@ -56,6 +56,8 @@ button{font:inherit;border:0;background:none;color:inherit;cursor:pointer}
 .row:active{transform:scale(.994)}
 .mono{width:44px;height:44px;border-radius:13px;flex:none;display:grid;place-items:center;
   color:#fff;font-weight:700;font-size:16px;letter-spacing:.3px}
+.mono.imglogo{overflow:hidden}
+.mono.imglogo img{width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block}
 .row .meta{flex:1;min-width:0}
 .row .t{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .row .c{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
@@ -253,6 +255,15 @@ const HUES=[210,265,330,20,150,190,45,300];
 function hue(s){let h=0;for(const c of s)h=(h*31+c.charCodeAt(0))>>>0;return HUES[h%HUES.length];}
 function mono(el,title){const h=hue(title||'?');el.textContent=(title||'?').trim()[0].toUpperCase();
   el.style.background='linear-gradient(150deg,hsl('+h+' 70% 55%),hsl('+((h+40)%360)+' 68% 46%))';}
+// project logo (from AGENTS.md): image, else emoji/text, else monogram letter
+function avatar(el,s){
+  const lg=s&&s.logo;
+  if(lg&&lg.img){el.textContent='';el.style.fontSize='';el.style.background='var(--surface2)';el.classList.add('imglogo');
+    const im=document.createElement('img');im.src=lg.img;im.alt='';el.appendChild(im);return;}
+  el.classList.remove('imglogo');
+  if(lg&&lg.txt){el.textContent=lg.txt;el.style.background='var(--surface2)';el.style.fontSize='20px';return;}
+  el.style.fontSize='';mono(el,s?s.title:'?');
+}
 function ago(t){const s=Date.now()/1000-t;if(s<60)return'now';if(s<3600)return(s/60|0)+'m';if(s<86400)return(s/3600|0)+'h';return(s/86400|0)+'d';}
 
 /* ---------- chat list ---------- */
@@ -263,7 +274,7 @@ function renderList(){
   if(!rows.length){L.innerHTML='<div class=empty>No chats.</div>';return;}
   for(const s of rows){
     const r=document.createElement('div');r.className='row'+(s.id===cur?' on':'');r.dataset.id=s.id;
-    const m=document.createElement('div');m.className='mono';mono(m,s.title);
+    const m=document.createElement('div');m.className='mono';avatar(m,s);
     const meta=document.createElement('div');meta.className='meta';
     meta.innerHTML='<div class=t></div><div class=c></div>';
     meta.querySelector('.t').textContent=s.title; meta.querySelector('.c').textContent=s.cwd;
@@ -411,7 +422,7 @@ function startStream(){
   }catch(e){}
 }
 function openChat(s){
-  cur=s.id;curTitle=s.title;$('ctitle').textContent=s.title;mono($('cmono'),s.title);
+  cur=s.id;curTitle=s.title;$('ctitle').textContent=s.title;avatar($('cmono'),s);
   shown=WIN;total=0;curStart=0;nodes=[];lastSig=null;openTools.clear();typingEl=null;typingOn=false;wasWorking=false;$('msgs').innerHTML='';
   $('chats').hidden=true;$('conv').hidden=false;$('convempty').hidden=true;
   document.querySelectorAll('#list .row').forEach(r=>r.classList.toggle('on',r.dataset.id===s.id));

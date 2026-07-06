@@ -1,7 +1,29 @@
 # AGENTS.md — working on cc-bridge
 
+<!-- logo: assets/logo.svg -->
+
 Guidance for AI agents (and humans) editing this repo. Read `PLAN.md` for the
 roadmap and settled decisions; this file is the how-to-work.
+
+## Project logo (the `<!-- logo: … -->` convention)
+
+cc-bridge gives every chat an avatar. By default it's a monogram of the chat
+title; if the project's `AGENTS.md` contains a **logo marker**, cc-bridge shows
+that instead. The marker is a single HTML comment (invisible in rendered
+Markdown) whose value is, in order of preference:
+
+```
+<!-- logo: assets/logo.png -->          image file, path relative to AGENTS.md
+<!-- logo: https://…/logo.png -->       image URL
+<!-- logo: 👻 -->                        emoji / short text (fallback)
+```
+
+Supported image types: png, jpg, gif, webp, svg, ico. Local image files are
+served by cc-bridge at `/api/logo`. It finds `AGENTS.md` cheaply — the chat's
+working directory, then up the parent chain, then one level down (for nested
+sub-projects) — and caches the result (a live `AGENTS.md` re-reads on mtime
+change; adding one where none existed needs a server restart). Any repo can
+adopt this by adding one line near the top of its `AGENTS.md`.
 
 ## What it is
 
