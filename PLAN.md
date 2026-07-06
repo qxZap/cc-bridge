@@ -49,6 +49,16 @@ Work required:
 - Screenshots gallery on the landing page.
 - Autostart snippets (Windows Task Scheduler / systemd user unit).
 
+### 6. Notifications — "tell me when the AI is done"
+Tiered by what the browser actually allows:
+- **Tier 1 — foreground alert (shipped).** Title badge + one `navigator.vibrate` when a chat updates while the tab is hidden; a real desktop `Notification` on the working→idle transition. Works today, no HTTPS. **Limit:** the Notifications API needs a *secure context*, so it only fires on the PC via `http://localhost:PORT` — a phone on a plain-http LAN IP is blocked by the browser and only gets the title/vibrate fallback.
+- **Tier 2 — background push (needs HTTPS).** Service worker + Web Push (VAPID keys, message encryption, a push-service endpoint). Delivers when the tab is closed / phone locked. Requires serving cc-bridge over **HTTPS** — cleanest path for a VPN user is `tailscale serve` (valid cert on the tailnet) or a trusted self-signed cert. Note Web Push *delivery* routes through the browser vendor's push service (FCM/Mozilla), and the crypto would pull in a dependency — both are tensions with the local/zero-dep design; gate behind an opt-in flag.
+- **Tier 3 — reuse the Telegram skill.** If HTTPS is off the table, have the server fire a `telegram-send` on turn completion. Reliable "buzz when locked", no HTTPS, no new deps — just shells out to the existing skill. Opt-in.
+
+### 7. Usage meter
+- **Context ring (shipped).** Per-chat context-in-use ring in the conversation header, from the last turn's usage in the transcript (input + cache_read + cache_creation). Window inferred: 1M if >200K else 200K. Green → amber (70%) → red (90%).
+- **Weekly / plan usage bars (blocked).** Not available locally — `~/.claude` has no usage/quota file; weekly limits live server-side (Claude Code's `/usage` hits the API). Surfacing them needs an authenticated Anthropic API call, which breaks the local/zero-cloud design. Revisit only if Claude Code writes usage to disk or exposes a scriptable command.
+
 ---
 
 ## Constraints / decisions (settled — don't relitigate)

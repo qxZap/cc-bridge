@@ -76,7 +76,7 @@ def session_meta(path, mtime):
     if c and c[0] == mtime:
         return c[1]
     sid = os.path.splitext(os.path.basename(path))[0]
-    cwd, title, first_user = None, None, None
+    cwd, title, first_user, last_usage = None, None, None, None
     for rec in read_lines(path):
         if cwd is None and isinstance(rec.get("cwd"), str):
             cwd = rec["cwd"]
@@ -84,7 +84,17 @@ def session_meta(path, mtime):
             title = rec["aiTitle"]
         if first_user is None and rec.get("type") == "user":
             first_user = _plain_text(rec)
-    meta = (sid, cwd, (title or (first_user or "")[:60] or sid[:8]))
+        u = (rec.get("message") or {}).get("usage")
+        if isinstance(u, dict):
+            last_usage = u
+    # context in use = last turn's prompt size (fresh input + cached). Window is
+    # 200K normally, 1M for [1m] sessions — inferred from the token count.
+    ctx = 0
+    if last_usage:
+        ctx = (last_usage.get("input_tokens", 0) + last_usage.get("cache_read_input_tokens", 0)
+               + last_usage.get("cache_creation_input_tokens", 0))
+    win = 1000000 if ctx > 200000 else 200000
+    meta = (sid, cwd, (title or (first_user or "")[:60] or sid[:8]), ctx, win)
     with _LOCK:
         _META[path] = (mtime, meta)
     return meta
@@ -99,9 +109,10 @@ def list_sessions():
     rows = []
     for mtime, p in paths[:40]:
         try:
-            sid, cwd, title = session_meta(p, mtime)
+            sid, cwd, title, ctx, win = session_meta(p, mtime)
             rows.append({"id": sid, "cwd": cwd or "?", "title": title,
-                         "mtime": mtime, "running": sid in running})
+                         "mtime": mtime, "running": sid in running,
+                         "ctx": ctx, "ctxpct": round(100 * ctx / win) if win else 0})
         except Exception:
             continue
     return rows

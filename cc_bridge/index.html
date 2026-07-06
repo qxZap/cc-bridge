@@ -39,6 +39,7 @@ button{font:inherit;border:0;background:none;color:inherit;cursor:pointer}
 .spacer{flex:1}
 .iconbtn{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;color:var(--muted)}
 .iconbtn:hover{background:var(--surface2);color:var(--text)}
+.iconbtn.on{color:var(--accent)}
 .iconbtn svg{width:20px;height:20px}
 
 /* ---- search ---- */
@@ -69,6 +70,8 @@ button{font:inherit;border:0;background:none;color:inherit;cursor:pointer}
 .title .n{font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .title .s{font-size:12px;color:var(--muted)}
 .title .s.on{color:#37d67a}
+#ctxwrap{display:flex;align-items:center;gap:6px;flex:none}
+#ctxwrap .pct{font:600 11px/1 ui-monospace,monospace;color:var(--muted);font-variant-numeric:tabular-nums}
 #msgs{flex:1;overflow:auto;padding:16px 14px 8px;display:flex;flex-direction:column;gap:10px}
 .more{align-self:center;color:var(--faint);font-size:12px;padding:6px 12px;border-radius:20px;background:var(--surface)}
 .msg{max-width:82%;padding:9px 13px;border-radius:var(--radius);white-space:normal;
@@ -133,6 +136,7 @@ details.tool pre{margin:0;padding:10px 12px;border-top:1px solid var(--tool-line
 <!-- CHAT LIST -->
 <section id=chats class=screen>
   <div class=bar><span class=brand><span class=dot></span>cc-bridge</span><span class=spacer></span>
+    <button class=iconbtn id=bell title="notify me when a turn finishes"><svg viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg></button>
     <button class=iconbtn id=refresh title=refresh><svg viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6"/></svg></button>
   </div>
   <div class=search><div class=wrap>
@@ -148,6 +152,8 @@ details.tool pre{margin:0;padding:10px 12px;border-top:1px solid var(--tool-line
     <button class=iconbtn id=back title=back><svg viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=2.2 stroke-linecap=round stroke-linejoin=round><path d="m15 18-6-6 6-6"/></svg></button>
     <div class="mono" id=cmono style="width:34px;height:34px;border-radius:10px;font-size:14px"></div>
     <div class=title><div class=n id=ctitle></div><div class=s id=cstatus>idle</div></div>
+    <span class=spacer></span>
+    <div id=ctxwrap title="context used"></div>
   </div>
   <div id=msgs></div>
   <div class=composer>
@@ -233,12 +239,32 @@ async function loadList(){
   try{sessions=await(await fetch('/api/sessions')).json();}catch(e){return;}
   try{localStorage.setItem('ccb.sessions',JSON.stringify(sessions));}catch(e){}
   if(!$('chats').hidden)renderList();
-  if(cur){const s=sessions.find(x=>x.id===cur);setStatus((s&&s.running)||isSending(cur));}
+  if(cur){const s=sessions.find(x=>x.id===cur);setStatus((s&&s.running)||isSending(cur));if(s)setRing(s.ctxpct);}
 }
 
 /* ---------- conversation (incremental render) ---------- */
 const WIN=30; let shown=WIN, total=0, curStart=0, nodes=[], lastSig=null, loadingMore=false;
 const openTools=new Set();
+// Foreground-only alert: title badge + one vibrate when a chat updates while the
+// tab is hidden. Background/locked push needs HTTPS (service worker) — see PLAN.md.
+let origTitle=document.title, buzzed=false;
+function notify(){if(!document.hidden)return;document.title='🔔 cc-bridge';if(!buzzed){buzzed=true;try{navigator.vibrate&&navigator.vibrate([90,40,90]);}catch(e){}}}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){document.title=origTitle;buzzed=false;}});
+// Desktop notification when a turn finishes. Real Notifications need a secure
+// context (HTTPS or localhost) — works on the PC via http://localhost:PORT, not
+// over a plain-http LAN IP (phone falls back to the title/vibrate above).
+let notifPerm=('Notification' in window)?Notification.permission:'unsupported', wasWorking=false;
+function markDone(title){
+  if(!document.hidden)return;                          // you're watching it — no need to ping
+  if(notifPerm==='granted'){try{const n=new Notification('Claude is done',{body:(title||'A chat')+' finished thinking',tag:'ccb'});setTimeout(()=>n.close(),8000);}catch(e){}}
+  notify();
+}
+async function enableNotif(){
+  if(notifPerm==='unsupported'){alert("This browser blocks notifications on a plain-http LAN address. Open cc-bridge on the PC via http://localhost:"+location.port+" for desktop alerts (or serve it over HTTPS).");return;}
+  try{notifPerm=await Notification.requestPermission();}catch(e){}
+  $('bell').classList.toggle('on',notifPerm==='granted');
+  if(notifPerm==='granted'){try{new Notification('cc-bridge',{body:"On — I'll ping you when a turn finishes."});}catch(e){}}
+}
 function sig(m){return m.role+'|'+m.kind+'|'+(m.text||'').length+'|'+(m.detail||'').length;}
 function nodeFor(m,gi){
   if(m.kind==='tool'){
@@ -304,7 +330,14 @@ function showTyping(){if(typingEl||$('conv').hidden||$('msgs').querySelector('.l
   typingEl=document.createElement('div');typingEl.className='typing';typingEl.innerHTML='<span></span><span></span><span></span>';
   $('msgs').appendChild(typingEl);$('msgs').scrollTop=$('msgs').scrollHeight;}
 function hideTyping(){if(typingEl){typingEl.remove();typingEl=null;}}
-function setStatus(on){const s=$('cstatus');s.textContent=on?'working…':'idle';s.classList.toggle('on',!!on);$('stop').hidden=!on;typingOn=!!on;on?showTyping():hideTyping();}
+function setStatus(on){const s=$('cstatus');s.textContent=on?'working…':'idle';s.classList.toggle('on',!!on);$('stop').hidden=!on;typingOn=!!on;on?showTyping():hideTyping();
+  if(!on&&wasWorking)markDone(curTitle);wasWorking=!!on;}   // working -> idle = AI done thinking
+function setRing(pct){const w=$('ctxwrap');if(!w)return;
+  if(pct==null||isNaN(pct)){w.innerHTML='';w.title='';return;}
+  pct=Math.max(0,Math.min(100,Math.round(pct)));const r=11,c=2*Math.PI*r,off=c*(1-pct/100);
+  const col=pct>=90?'#e5484d':pct>=70?'#ffcf6b':'#37d67a';
+  w.innerHTML='<svg width=28 height=28 viewBox="0 0 28 28"><circle cx=14 cy=14 r='+r+' fill=none stroke=var(--line) stroke-width=3/><circle cx=14 cy=14 r='+r+' fill=none stroke="'+col+'" stroke-width=3 stroke-linecap=round stroke-dasharray="'+c.toFixed(1)+'" stroke-dashoffset="'+off.toFixed(1)+'" transform="rotate(-90 14 14)"/></svg><span class=pct>'+pct+'%</span>';
+  w.title='Context: '+pct+'% used';}
 let es=null;
 function startStream(){
   if(es){es.close();es=null;}
@@ -316,11 +349,11 @@ function startStream(){
 }
 function openChat(s){
   cur=s.id;curTitle=s.title;$('ctitle').textContent=s.title;mono($('cmono'),s.title);
-  shown=WIN;total=0;curStart=0;nodes=[];lastSig=null;openTools.clear();typingEl=null;typingOn=false;$('msgs').innerHTML='';
+  shown=WIN;total=0;curStart=0;nodes=[];lastSig=null;openTools.clear();typingEl=null;typingOn=false;wasWorking=false;$('msgs').innerHTML='';
   $('chats').hidden=true;$('conv').hidden=false;
   const t=$('in');t.value=loadDraft(s.id);t.style.height='auto';t.style.height=Math.min(140,t.scrollHeight)+'px';
   const c=cachedMsgs(s.id);if(c)renderWindow(c,true);else showLoading();   // instant paint from snapshot, else a spinner
-  $('send').disabled=isSending(s.id);setStatus(s.running||isSending(s.id));
+  $('send').disabled=isSending(s.id);setStatus(s.running||isSending(s.id));setRing(s.ctxpct);
   if(location.hash!=='#'+s.id)history.replaceState(null,'','#'+s.id);
   loadWindow(true);startStream();
 }
@@ -351,6 +384,7 @@ async function stop(){if(!cur)return;try{await fetch('/api/stop',{method:'POST',
 
 /* ---------- wiring ---------- */
 $('back').onclick=back;$('send').onclick=send;$('stop').onclick=stop;$('refresh').onclick=loadList;
+$('bell').onclick=enableNotif;if(notifPerm==='granted')$('bell').classList.add('on');
 $('q').addEventListener('input',renderList);
 $('msgs').addEventListener('scroll',()=>{if($('msgs').scrollTop<40&&!loadingMore&&curStart>0){loadingMore=true;curStart=Math.max(0,curStart-WIN);loadWindow(false);}});
 $('in').addEventListener('input',e=>{e.target.style.height='auto';e.target.style.height=Math.min(140,e.target.scrollHeight)+'px';if(cur)saveDraft(cur,e.target.value);});
