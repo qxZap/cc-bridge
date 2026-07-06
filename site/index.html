@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang=en>
+<head>
+<meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<meta name=color-scheme content="dark">
+<title>cc-bridge — your Claude Code chats, on your phone</title>
+<meta name=description content="A tiny, dependency-free bridge that lets you read and continue your local Claude Code chats from your phone over LAN/VPN. No cloud relay.">
+<style>
+:root{
+  --bg:#0b0e14;--surface:#12161f;--surface2:#161b26;--line:#232a36;
+  --text:#e7ecf4;--muted:#8a94a6;--faint:#5c6675;--accent:#4f8cff;--user:#2b64d6;
+  --green:#9fdd8a;--tool:#1a2a16;--tool-line:#2c4726;--code:#0c1017;
+  --radius:16px;--shadow:0 1px 2px rgba(0,0,0,.4),0 18px 50px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}
+body{margin:0;background:
+  radial-gradient(1100px 620px at 78% -8%,rgba(79,140,255,.14),transparent 60%),
+  radial-gradient(900px 520px at 8% 8%,rgba(159,221,138,.07),transparent 55%),var(--bg);
+  color:var(--text);font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:inherit}
+.wrap{max-width:1040px;margin:0 auto;padding:0 22px}
+
+nav{display:flex;align-items:center;gap:12px;padding:20px 0}
+.brand{display:flex;align-items:center;gap:10px;font-weight:750;font-size:18px;letter-spacing:-.2px}
+.dot{width:11px;height:11px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 4px rgba(79,140,255,.22)}
+nav .sp{flex:1}
+.btn{display:inline-flex;align-items:center;gap:8px;border-radius:11px;padding:10px 16px;font-weight:650;
+  text-decoration:none;border:1px solid var(--line);color:var(--text);transition:.15s}
+.btn:hover{border-color:#33404f;background:var(--surface)}
+.btn.pri{background:var(--accent);border-color:transparent;color:#fff}
+.btn.pri:hover{filter:brightness(1.07)}
+.btn svg{width:17px;height:17px}
+
+.hero{display:grid;grid-template-columns:1.15fr .85fr;gap:40px;align-items:center;padding:48px 0 30px}
+.tag{display:inline-block;font-size:12.5px;font-weight:600;color:var(--green);background:rgba(159,221,138,.08);
+  border:1px solid var(--tool-line);padding:5px 11px;border-radius:20px;margin-bottom:18px}
+h1{font-size:46px;line-height:1.08;letter-spacing:-1px;margin:.1em 0 .35em}
+h1 .g{background:linear-gradient(90deg,#8fb6ff,#9fdd8a);-webkit-background-clip:text;background-clip:text;color:transparent}
+.lead{font-size:18px;color:var(--muted);max-width:34ch}
+.cta{display:flex;gap:12px;flex-wrap:wrap;margin-top:26px}
+.pills{display:flex;gap:8px;flex-wrap:wrap;margin-top:22px}
+.pill{font-size:12.5px;color:var(--muted);border:1px solid var(--line);border-radius:20px;padding:5px 11px}
+
+/* phone mockup = the real UI styling, not a screenshot */
+.device{justify-self:center;width:288px;height:590px;border-radius:38px;background:#05070b;
+  border:1px solid #2a3342;box-shadow:var(--shadow);padding:11px;position:relative}
+.device::before{content:"";position:absolute;top:15px;left:50%;transform:translateX(-50%);width:96px;height:6px;border-radius:6px;background:#1a2130}
+.scr{height:100%;border-radius:28px;overflow:hidden;background:var(--bg);display:flex;flex-direction:column}
+.tb{display:flex;align-items:center;gap:8px;padding:16px 12px 10px;border-bottom:1px solid var(--line)}
+.tb .bk{color:var(--accent);font-size:20px}
+.tb .av{width:30px;height:30px;border-radius:9px;background:linear-gradient(150deg,hsl(210 70% 55%),hsl(250 68% 46%));display:grid;place-items:center;font-weight:700;font-size:13px;color:#fff}
+.tb .nm{font-weight:650;font-size:14px}
+.tb .st{font-size:11px;color:var(--green)}
+.feed{flex:1;padding:12px;display:flex;flex-direction:column;gap:9px;overflow:hidden}
+.b{max-width:84%;padding:8px 11px;border-radius:14px;font-size:12.5px;box-shadow:0 1px 2px rgba(0,0,0,.3)}
+.b.u{align-self:flex-end;background:linear-gradient(180deg,var(--accent),var(--user));color:#fff;border-bottom-right-radius:5px}
+.b.a{align-self:flex-start;background:var(--surface);border:1px solid var(--line);border-bottom-left-radius:5px}
+.b.a b{color:#eaf0fb}
+.b.a .h{font-weight:700;font-size:13px;margin-bottom:2px}
+.b.a ul{margin:4px 0 0;padding-left:16px}.b.a code{background:var(--code);padding:1px 4px;border-radius:4px;font-size:11px}
+.tchip{align-self:flex-start;background:var(--tool);border:1px solid var(--tool-line);color:var(--green);
+  font-family:ui-monospace,monospace;font-size:11px;padding:7px 10px;border-radius:12px}
+.cmp{display:flex;gap:7px;padding:9px;border-top:1px solid var(--line)}
+.cmp .in{flex:1;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:8px 11px;color:var(--faint);font-size:12px}
+.cmp .snd{width:34px;height:34px;border-radius:50%;background:var(--accent);display:grid;place-items:center;color:#fff}
+
+section{padding:34px 0}
+h2{font-size:26px;letter-spacing:-.5px;margin:0 0 6px}
+.sub{color:var(--muted);margin:0 0 26px}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px}
+.card .ic{width:34px;height:34px;border-radius:10px;background:rgba(79,140,255,.12);display:grid;place-items:center;margin-bottom:12px}
+.card .ic svg{width:19px;height:19px;color:var(--accent)}
+.card h3{margin:0 0 5px;font-size:15.5px}
+.card p{margin:0;color:var(--muted);font-size:14px}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;counter-reset:s}
+.step{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px}
+.step::before{counter-increment:s;content:counter(s);display:grid;place-items:center;width:30px;height:30px;border-radius:9px;
+  background:var(--accent);color:#fff;font-weight:700;margin-bottom:12px}
+.step h3{margin:0 0 5px;font-size:15px}.step p{margin:0;color:var(--muted);font-size:14px}
+pre{background:var(--code);border:1px solid var(--line);border-radius:14px;padding:16px 18px;overflow:auto;font-size:13.5px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;line-height:1.65}
+pre .c{color:var(--green)}pre .m{color:var(--faint)}
+.note{background:linear-gradient(180deg,rgba(159,221,138,.05),transparent);border:1px solid var(--tool-line);
+  border-radius:14px;padding:18px 20px;color:var(--muted);font-size:14.5px}
+.note b{color:var(--text)}
+footer{border-top:1px solid var(--line);margin-top:30px;padding:26px 0 46px;color:var(--faint);font-size:13.5px;display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+footer .sp{flex:1}
+@media(max-width:820px){
+  .hero{grid-template-columns:1fr;gap:30px;text-align:center}
+  .lead{margin:0 auto}.cta,.pills{justify-content:center}
+  h1{font-size:38px}.grid,.steps{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class=wrap>
+
+  <nav>
+    <span class=brand><span class=dot></span>cc-bridge</span>
+    <span class=sp></span>
+    <a class=btn href="https://github.com/qxZap/cc-bridge">
+      <svg viewBox="0 0 24 24" fill=currentColor><path d="M12 2A10 10 0 0 0 8.8 21.5c.5.1.7-.2.7-.5v-1.7c-2.8.6-3.4-1.3-3.4-1.3-.4-1.2-1.1-1.5-1.1-1.5-.9-.6.1-.6.1-.6 1 .1 1.6 1 1.6 1 .9 1.6 2.4 1.1 3 .8.1-.7.4-1.1.6-1.4-2.2-.2-4.6-1.1-4.6-5a3.9 3.9 0 0 1 1-2.7 3.6 3.6 0 0 1 .1-2.7s.8-.3 2.7 1a9.4 9.4 0 0 1 5 0c1.9-1.3 2.7-1 2.7-1 .5 1.4.2 2.4.1 2.7a3.9 3.9 0 0 1 1 2.7c0 3.9-2.3 4.7-4.6 5 .4.3.7.9.7 1.9v2.8c0 .3.2.6.7.5A10 10 0 0 0 12 2Z"/></svg>
+      GitHub</a>
+  </nav>
+
+  <div class=hero>
+    <div>
+      <span class=tag>◆ local · no cloud relay · zero dependencies</span>
+      <h1>Your Claude Code chats,<br><span class=g>on your phone.</span></h1>
+      <p class=lead>A tiny bridge that lets you read and continue your live Claude Code sessions from any device on your LAN or VPN — with full context, live updates, and nothing routed through the cloud.</p>
+      <div class=cta>
+        <a class="btn pri" href="https://github.com/qxZap/cc-bridge">Get it on GitHub</a>
+        <a class=btn href="#how">How it works</a>
+      </div>
+      <div class=pills>
+        <span class=pill>Python stdlib only</span>
+        <span class=pill>~1 file server</span>
+        <span class=pill>Markdown + tables</span>
+        <span class=pill>Live via SSE</span>
+      </div>
+    </div>
+
+    <div class=device><div class=scr>
+      <div class=tb><span class=bk>&lsaquo;</span><span class=av>L</span>
+        <div><div class=nm>llama.cpp</div><div class=st>working…</div></div></div>
+      <div class=feed>
+        <div class="b u">can you summarize the plan?</div>
+        <div class="b a"><div class=h>Plan</div>Refactor the loader, then:
+          <ul><li>cache by <code>mtime</code></li><li>stream via SSE</li><li>ship it</li></ul></div>
+        <div class=tchip>▸ Read&nbsp;&nbsp;src/loader.py</div>
+        <div class="b u">looks good — go</div>
+        <div class="b a">On it. Pushing the change now.</div>
+      </div>
+      <div class=cmp><div class=in>reply…</div><div class=snd>
+        <svg viewBox="0 0 24 24" width=17 fill=none stroke=#fff stroke-width=2 stroke-linecap=round stroke-linejoin=round><path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7Z"/></svg>
+      </div></div>
+    </div></div>
+  </div>
+
+  <section>
+    <h2>Why it's nice</h2>
+    <p class=sub>Simple on purpose. It reads Claude Code's own transcripts and continues them — no new moving parts.</p>
+    <div class=grid>
+      <div class=card><div class=ic><svg viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=2><path d="M12 2v20M2 12h20"/></svg></div><h3>Full context, same chat</h3><p>Replies run <code>claude --resume</code> and append to the exact session file — the whole conversation, not a copy.</p></div>
+      <div class=card><div class=ic><svg viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=2 stroke-linecap=round><path d="M4 12a8 8 0 0 1 8-8M20 12a8 8 0 0 1-8 8"/></svg></div><h3>Live, no refresh</h3><p>Server-Sent Events push the moment a transcript changes. Thinking and tool calls stream in as they happen.</p></div>
+      <div class=card><div class=ic><svg viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=2 stroke-linecap=round><path d="M4 7h16M4 12h10M4 17h7"/></svg></div><h3>Reads beautifully</h3><p>Full markdown — headings, code blocks, <b>tables</b>, and collapsible tool calls. No more raw characters.</p></div>
+      <div class=card><div class=ic><svg viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg></div><h3>Stays on your network</h3><p>Binds to your LAN/VPN, no inbound ports opened to the world, nothing relayed through anyone's cloud.</p></div>
+      <div class=card><div class=ic><svg viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><path d="M20 6 9 17l-5-5"/></svg></div><h3>Zero dependencies</h3><p>Just Python's standard library. One server file, one HTML file. Nothing to <code>pip install</code>.</p></div>
+      <div class=card><div class=ic><svg viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><rect x=5 y=2 width=14 height=20 rx=3/><path d="M12 18h.01"/></svg></div><h3>Made for the couch</h3><p>Searchable chat list, tap to open, infinite scroll, dark/light, and inputs that don't zoom on iOS.</p></div>
+    </div>
+  </section>
+
+  <section id=how>
+    <h2>Three steps</h2>
+    <p class=sub>Leave it running on the machine with your chats. Open the URL anywhere on your network.</p>
+    <div class=steps>
+      <div class=step><h3>Run it</h3><p><code>python bridge.py</code> on the machine where Claude Code lives. It prints a LAN URL.</p></div>
+      <div class=step><h3>Open on your phone</h3><p>Hit that URL over Wi-Fi or VPN. Every chat — VS Code and terminal — shows up live.</p></div>
+      <div class=step><h3>Read &amp; reply</h3><p>Tap a chat, follow the thinking, and reply straight into the same conversation.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Quickstart</h2>
+    <p class=sub>Requires Python 3.8+ and the <code>claude</code> CLI, logged in.</p>
+    <pre><span class=m># on the machine running your Claude Code chats</span>
+git clone https://github.com/qxZap/cc-bridge
+cd cc-bridge
+python bridge.py
+<span class=m># -> open the printed http://&lt;lan-ip&gt;:8787/ on your phone</span></pre>
+  </section>
+
+  <section>
+    <div class=note><b>One honest limit.</b> A message you send from your phone lands in the conversation on disk, but an <i>open</i> VS Code panel keeps its copy in memory and won't refresh until you <code>/resume</code> it — Claude Code exposes no way to push into a live panel. Think of cc-bridge as a second live head on the same conversation. Simple rule: one head at a time.</div>
+  </section>
+
+  <footer>
+    <span class=brand style="font-size:15px"><span class=dot></span>cc-bridge</span>
+    <span class=sp></span>
+    <a href="https://github.com/qxZap/cc-bridge">GitHub</a>
+    <span>MIT</span>
+  </footer>
+
+</div>
+</body>
+</html>

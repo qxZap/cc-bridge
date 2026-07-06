@@ -1,0 +1,31 @@
+# Prepared, NOT auto-deploying. Trigger is manual only (workflow_dispatch), so
+# pushing does not publish anything. To go live later: add a `push` trigger and
+# enable Pages (Settings -> Pages -> Source: GitHub Actions) on a public repo.
+name: Deploy landing page
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4
