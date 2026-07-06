@@ -113,6 +113,19 @@ details.tool pre{margin:0;padding:10px 12px;border-top:1px solid var(--tool-line
 #send{background:var(--accent)}#send:disabled{opacity:.45}
 #stop{background:var(--danger)}
 .circle svg{width:20px;height:20px}
+
+/* ---- loading + thinking dots + entrance motion ---- */
+.loading{flex:1;display:grid;place-items:center;padding:50px}
+.spin{width:26px;height:26px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--accent);animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.typing{align-self:flex-start;display:flex;gap:5px;align-items:center;padding:13px 15px;background:var(--surface);
+  border:1px solid var(--line);border-radius:var(--radius);border-bottom-left-radius:6px;box-shadow:var(--shadow);animation:fadein .25s ease}
+.typing span{width:7px;height:7px;border-radius:50%;background:var(--muted);animation:blink 1.3s infinite ease-in-out}
+.typing span:nth-child(2){animation-delay:.18s}.typing span:nth-child(3){animation-delay:.36s}
+@keyframes blink{0%,70%,100%{opacity:.3;transform:translateY(0)}35%{opacity:1;transform:translateY(-3px)}}
+.msg.think,.msg.assistant{animation:fadein .3s ease}
+@keyframes fadein{from{opacity:0;transform:translateY(6px) scale(.99)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.msg,.spin,.typing span,.typing{animation:none!important}}
 </style>
 </head>
 <body>
@@ -261,6 +274,7 @@ function renderWindow(resp,bottom){
   if(loadingMore){M.scrollTop=M.scrollHeight-prevH+prevTop;loadingMore=false;}
   else if(bottom)M.scrollTop=M.scrollHeight;
   if(cur)cacheMsgs(cur,resp);   // snapshot for instant load next time / while server boots
+  typingEl=null;if(typingOn)showTyping();   // rebuild wiped it; re-pin the thinking dots last
 }
 async function loadWindow(bottom){
   if(!cur||$('conv').hidden)return;
@@ -278,11 +292,19 @@ async function loadLive(){
   let changed=false;const k=from-curStart;
   // ms[0] is the last message we already had -> replace only if it changed (streaming)
   if(k>=0&&k<nodes.length&&sig(ms[0])!==lastSig){const nn=nodeFor(ms[0],from);M.replaceChild(nn,nodes[k]);nodes[k]=nn;changed=true;}
+  if(ms.length>1)hideTyping();   // keep the thinking dots below any newly-streamed bubbles
   for(let i=1;i<ms.length;i++){const gi=from+i;const n=nodeFor(ms[i],gi);nodes.push(n);M.appendChild(n);changed=true;}
   total=resp.total;lastSig=sig(ms[ms.length-1]);
+  if(typingOn)showTyping();
   if(changed&&atBottom)M.scrollTop=M.scrollHeight;
 }
-function setStatus(on){const s=$('cstatus');s.textContent=on?'working…':'idle';s.classList.toggle('on',!!on);$('stop').hidden=!on;}
+let typingOn=false, typingEl=null;
+function showLoading(){$('msgs').innerHTML='<div class=loading><div class=spin></div></div>';}
+function showTyping(){if(typingEl||$('conv').hidden||$('msgs').querySelector('.loading'))return;
+  typingEl=document.createElement('div');typingEl.className='typing';typingEl.innerHTML='<span></span><span></span><span></span>';
+  $('msgs').appendChild(typingEl);$('msgs').scrollTop=$('msgs').scrollHeight;}
+function hideTyping(){if(typingEl){typingEl.remove();typingEl=null;}}
+function setStatus(on){const s=$('cstatus');s.textContent=on?'working…':'idle';s.classList.toggle('on',!!on);$('stop').hidden=!on;typingOn=!!on;on?showTyping():hideTyping();}
 let es=null;
 function startStream(){
   if(es){es.close();es=null;}
@@ -294,11 +316,11 @@ function startStream(){
 }
 function openChat(s){
   cur=s.id;curTitle=s.title;$('ctitle').textContent=s.title;mono($('cmono'),s.title);
-  shown=WIN;total=0;curStart=0;nodes=[];lastSig=null;openTools.clear();$('msgs').innerHTML='';
+  shown=WIN;total=0;curStart=0;nodes=[];lastSig=null;openTools.clear();typingEl=null;typingOn=false;$('msgs').innerHTML='';
   $('chats').hidden=true;$('conv').hidden=false;
   const t=$('in');t.value=loadDraft(s.id);t.style.height='auto';t.style.height=Math.min(140,t.scrollHeight)+'px';
+  const c=cachedMsgs(s.id);if(c)renderWindow(c,true);else showLoading();   // instant paint from snapshot, else a spinner
   $('send').disabled=isSending(s.id);setStatus(s.running||isSending(s.id));
-  const c=cachedMsgs(s.id);if(c)renderWindow(c,true);   // instant paint from last snapshot; loadWindow refreshes
   if(location.hash!=='#'+s.id)history.replaceState(null,'','#'+s.id);
   loadWindow(true);startStream();
 }
@@ -322,7 +344,7 @@ async function send(){
   try{const r=await(await fetch('/api/send',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:sid,text:v})})).json();
     if(!r.ok)alert('send failed: '+r.error);}catch(e){alert(e);}
   sendingSet.delete(sid);
-  if(sid===cur){$('send').disabled=false;loadWindow(true);}
+  if(sid===cur){$('send').disabled=false;setStatus(false);loadWindow(true);}
 }
 async function stop(){if(!cur)return;try{await fetch('/api/stop',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:cur})});}catch(e){}}
 

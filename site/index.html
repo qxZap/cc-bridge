@@ -156,7 +156,7 @@ footer .sp{flex:1}
     <h2>Three steps</h2>
     <p class=sub>Leave it running on the machine with your chats. Open the URL anywhere on your network.</p>
     <div class=steps>
-      <div class=step><h3>Run it</h3><p><code>python bridge.py</code> on the machine where Claude Code lives. It prints a LAN URL.</p></div>
+      <div class=step><h3>Install it</h3><p><code>uv tool install git+https://github.com/qxZap/cc-bridge</code>, then run <code>cc-bridge</code> where Claude Code lives. It prints a LAN URL.</p></div>
       <div class=step><h3>Open on your phone</h3><p>Hit that URL over Wi-Fi or VPN. Every chat — VS Code and terminal — shows up live.</p></div>
       <div class=step><h3>Read &amp; reply</h3><p>Tap a chat, follow the thinking, and reply straight into the same conversation.</p></div>
     </div>
@@ -164,11 +164,11 @@ footer .sp{flex:1}
 
   <section>
     <h2>Quickstart</h2>
-    <p class=sub>Requires Python 3.8+ and the <code>claude</code> CLI, logged in.</p>
+    <p class=sub>Requires the <code>claude</code> CLI (logged in) and <a href="https://docs.astral.sh/uv/">uv</a>. Python 3.8+.</p>
     <pre><span class=m># on the machine running your Claude Code chats</span>
-git clone https://github.com/qxZap/cc-bridge
-cd cc-bridge
-python bridge.py
+uv tool install git+https://github.com/qxZap/cc-bridge
+cc-bridge
+<span class=m># or without installing: uvx --from git+https://github.com/qxZap/cc-bridge cc-bridge</span>
 <span class=m># -> open the printed http://&lt;lan-ip&gt;:8787/ on your phone</span></pre>
   </section>
 
