@@ -1,0 +1,38 @@
+[project]
+name = "cc-bridge"
+version = "0.1.0"
+description = "View and continue your local Claude Code chats from any device on your LAN/VPN. Zero runtime dependencies."
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+authors = [{ name = "qxZap" }]
+keywords = ["claude-code", "claude", "remote", "bridge", "mobile", "lan"]
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Environment :: Console",
+    "Topic :: Communications :: Chat",
+]
+# Standard library only — no runtime dependencies, by design.
+dependencies = []
+
+[project.scripts]
+cc-bridge = "cc_bridge:main"
+
+[project.urls]
+Homepage = "https://github.com/qxZap/cc-bridge"
+Repository = "https://github.com/qxZap/cc-bridge"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["cc_bridge"]
+
+# index.html is package data — ship it inside the wheel next to server.py.
+[tool.hatch.build.targets.wheel.force-include]
+"cc_bridge/index.html" = "cc_bridge/index.html"
+
+[tool.hatch.build.targets.sdist]
+include = ["cc_bridge", "README.md", "LICENSE", "PLAN.md"]

@@ -21,23 +21,35 @@ same history — just reachable from the couch.
 
 ## Run
 
+Global command via [uv](https://docs.astral.sh/uv/) — one line, any machine, still zero runtime deps:
+
 ```bash
-python bridge.py
+uv tool install git+https://github.com/qxZap/cc-bridge
+cc-bridge
 ```
 
-It prints a URL like `http://192.168.1.20:8787/`. Open that on your phone over
-Wi-Fi/VPN. On Windows just double-click `start.bat`.
+Or run it without installing:
 
-> Coming soon: a global `cc-bridge` command via `uv tool install` — see [PLAN.md](PLAN.md).
+```bash
+uvx --from git+https://github.com/qxZap/cc-bridge cc-bridge   # ephemeral
+```
+
+Or from a clone (no install needed):
+
+```bash
+uv run cc-bridge      # or: python bridge.py      (Windows: double-click start.bat)
+```
+
+It prints a URL like `http://192.168.1.20:8787/`. Open that on your phone over Wi-Fi/VPN.
 
 Options:
 
 ```bash
-python bridge.py --port 9000
-python bridge.py --permission-mode default   # default is bypassPermissions
+cc-bridge --port 9000
+cc-bridge --permission-mode default   # default is bypassPermissions
 ```
 
-Requirements: Python 3.8+ and the `claude` CLI on PATH, logged in.
+Requirements: Python 3.8+ and the `claude` CLI on PATH, logged in. `uv` optional (only for the global command).
 
 ## The one limitation (by design of Claude Code)
 
@@ -61,6 +73,8 @@ it to the public internet is on you. Permission mode defaults to
 
 ## Files
 
-- `bridge.py` — stdlib HTTP server + transcript reader + resume runner.
-- `index.html` — the entire front-end.
+- `cc_bridge/server.py` — stdlib HTTP server + transcript reader + resume runner + SSE.
+- `cc_bridge/index.html` — the entire front-end (bundled as package data).
+- `bridge.py` — thin shim so `python bridge.py` works from a clone.
+- `pyproject.toml` — packaging for the `cc-bridge` command (build-time hatchling only).
 - `start.bat` / `start.sh` — launchers.

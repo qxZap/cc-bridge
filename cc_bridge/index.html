@@ -146,7 +146,15 @@ details.tool pre{margin:0;padding:10px 12px;border-top:1px solid var(--tool-line
 
 <script>
 const $=id=>document.getElementById(id);
-let cur=null, curTitle='', sending=false, sessions=[];
+let cur=null, curTitle='', sessions=[];
+const sendingSet=new Set();               // sids with a turn in flight — per-chat, so chats run independently
+const isSending=id=>sendingSet.has(id);
+/* per-conversation draft + last-known snapshot, cached in localStorage */
+const dkey=id=>'ccb.draft.'+id, mkey=id=>'ccb.msg.'+id;
+function saveDraft(id,v){try{v?localStorage.setItem(dkey(id),v):localStorage.removeItem(dkey(id));}catch(e){}}
+function loadDraft(id){try{return localStorage.getItem(dkey(id))||'';}catch(e){return'';}}
+function cacheMsgs(id,resp){try{localStorage.setItem(mkey(id),JSON.stringify({total:resp.total,start:resp.start,messages:(resp.messages||[]).slice(-60)}));}catch(e){}}
+function cachedMsgs(id){try{return JSON.parse(localStorage.getItem(mkey(id))||'null');}catch(e){return null;}}
 
 /* ---------- markdown (escape-first, no deps) ---------- */
 const Z=" ";
@@ -210,12 +218,13 @@ function renderList(){
 }
 async function loadList(){
   try{sessions=await(await fetch('/api/sessions')).json();}catch(e){return;}
+  try{localStorage.setItem('ccb.sessions',JSON.stringify(sessions));}catch(e){}
   if(!$('chats').hidden)renderList();
-  if(cur){const s=sessions.find(x=>x.id===cur);setStatus(s&&s.running);}
+  if(cur){const s=sessions.find(x=>x.id===cur);setStatus((s&&s.running)||isSending(cur));}
 }
 
 /* ---------- conversation (incremental render) ---------- */
-const WIN=30; let shown=WIN, curData=[], curStart=0, nodes=[], loadingMore=false;
+const WIN=30; let shown=WIN, total=0, curStart=0, nodes=[], lastSig=null, loadingMore=false;
 const openTools=new Set();
 function sig(m){return m.role+'|'+m.kind+'|'+(m.text||'').length+'|'+(m.detail||'').length;}
 function nodeFor(m,gi){
@@ -235,36 +244,43 @@ function nodeFor(m,gi){
   else{d.classList.add('md');d.innerHTML=md(m.text);}
   return d;
 }
-function full(data){
-  const M=$('msgs');M.innerHTML='';nodes=[];
-  curStart=Math.max(0,data.length-shown);
-  if(curStart>0){const more=document.createElement('div');more.className='more';more.textContent='pull up for earlier';M.appendChild(more);}
-  for(let i=curStart;i<data.length;i++){const n=nodeFor(data[i],i);nodes.push(n);M.appendChild(n);}
-  curData=data;
+// Server paginates: we fetch a small tail window (open/pull-up) or the last-known
+// message onward (live). norm() adapts an old (pre-pagination) server that still
+// returns a plain array, so a not-yet-restarted server keeps working.
+function norm(resp,wantStart){
+  if(Array.isArray(resp)){const t=resp.length;const s=wantStart!=null?Math.max(0,Math.min(wantStart,t)):Math.max(0,t-shown);return{total:t,start:s,messages:resp.slice(s)};}
+  return resp;
 }
-async function loadMsgs(forceBottom){
+function renderWindow(resp,bottom){
+  const M=$('msgs');const prevH=M.scrollHeight,prevTop=M.scrollTop;
+  M.innerHTML='';nodes=[];total=resp.total;curStart=resp.start;
+  if(curStart>0){const more=document.createElement('div');more.className='more';more.textContent='pull up for earlier';M.appendChild(more);}
+  const ms=resp.messages||[];
+  for(let i=0;i<ms.length;i++){const gi=curStart+i;const n=nodeFor(ms[i],gi);nodes.push(n);M.appendChild(n);}
+  lastSig=ms.length?sig(ms[ms.length-1]):null;
+  if(loadingMore){M.scrollTop=M.scrollHeight-prevH+prevTop;loadingMore=false;}
+  else if(bottom)M.scrollTop=M.scrollHeight;
+  if(cur)cacheMsgs(cur,resp);   // snapshot for instant load next time / while server boots
+}
+async function loadWindow(bottom){
   if(!cur||$('conv').hidden)return;
-  let data;try{data=await(await fetch('/api/messages?id='+cur)).json();}catch(e){return;}
-  const M=$('msgs');
-  const start=Math.max(0,data.length-shown);
-  const atBottom=M.scrollHeight-M.scrollTop-M.clientHeight<100;
-  // rebuild only when the window origin moves (pull-up / chat switch / shrink)
-  if(loadingMore||start!==curStart||curData.length===0){
-    const prevH=M.scrollHeight, prevTop=M.scrollTop;
-    full(data);
-    if(loadingMore){M.scrollTop=M.scrollHeight-prevH+prevTop;loadingMore=false;}
-    else if(forceBottom||atBottom)M.scrollTop=M.scrollHeight;
-    return;
-  }
-  // delta: replace the last bubble only if it actually changed, append new ones. else untouched.
-  let changed=false;
-  const last=curData.length-1;
-  if(last>=curStart&&data[last]&&sig(curData[last])!==sig(data[last])){
-    const k=last-curStart;const nn=nodeFor(data[last],last);M.replaceChild(nn,nodes[k]);nodes[k]=nn;changed=true;
-  }
-  for(let i=curData.length;i<data.length;i++){const n=nodeFor(data[i],i);nodes.push(n);M.appendChild(n);changed=true;}
-  curData=data;
-  if(changed&&(forceBottom||atBottom))M.scrollTop=M.scrollHeight;
+  const qs=loadingMore?('start='+curStart):('tail='+shown);
+  let resp;try{resp=norm(await(await fetch('/api/messages?id='+cur+'&'+qs)).json(),loadingMore?curStart:null);}catch(e){return;}
+  renderWindow(resp,bottom);
+}
+async function loadLive(){
+  if(!cur||$('conv').hidden||isSending(cur)||loadingMore)return;
+  if(!nodes.length){return loadWindow(false);}
+  const from=Math.max(curStart,total-1);
+  let resp;try{resp=norm(await(await fetch('/api/messages?id='+cur+'&start='+from)).json(),from);}catch(e){return;}
+  const ms=resp.messages||[];if(!ms.length){total=resp.total;return;}
+  const M=$('msgs');const atBottom=M.scrollHeight-M.scrollTop-M.clientHeight<100;
+  let changed=false;const k=from-curStart;
+  // ms[0] is the last message we already had -> replace only if it changed (streaming)
+  if(k>=0&&k<nodes.length&&sig(ms[0])!==lastSig){const nn=nodeFor(ms[0],from);M.replaceChild(nn,nodes[k]);nodes[k]=nn;changed=true;}
+  for(let i=1;i<ms.length;i++){const gi=from+i;const n=nodeFor(ms[i],gi);nodes.push(n);M.appendChild(n);changed=true;}
+  total=resp.total;lastSig=sig(ms[ms.length-1]);
+  if(changed&&atBottom)M.scrollTop=M.scrollHeight;
 }
 function setStatus(on){const s=$('cstatus');s.textContent=on?'working…':'idle';s.classList.toggle('on',!!on);$('stop').hidden=!on;}
 let es=null;
@@ -272,16 +288,19 @@ function startStream(){
   if(es){es.close();es=null;}
   if(!cur)return;
   try{es=new EventSource('/api/stream?id='+cur);
-    es.onmessage=()=>{if(!sending)loadMsgs(false);};  // file changed -> re-read
+    es.onmessage=()=>{if(!isSending(cur))loadLive();};  // file changed -> fetch only new/changed
     es.onerror=()=>{};                                 // browser auto-reconnects
   }catch(e){}
 }
 function openChat(s){
-  cur=s.id;curTitle=s.title;$('ctitle').textContent=s.title;mono($('cmono'),s.title);setStatus(s.running);
-  shown=WIN;curData=[];nodes=[];openTools.clear();$('msgs').innerHTML='';
+  cur=s.id;curTitle=s.title;$('ctitle').textContent=s.title;mono($('cmono'),s.title);
+  shown=WIN;total=0;curStart=0;nodes=[];lastSig=null;openTools.clear();$('msgs').innerHTML='';
   $('chats').hidden=true;$('conv').hidden=false;
+  const t=$('in');t.value=loadDraft(s.id);t.style.height='auto';t.style.height=Math.min(140,t.scrollHeight)+'px';
+  $('send').disabled=isSending(s.id);setStatus(s.running||isSending(s.id));
+  const c=cachedMsgs(s.id);if(c)renderWindow(c,true);   // instant paint from last snapshot; loadWindow refreshes
   if(location.hash!=='#'+s.id)history.replaceState(null,'','#'+s.id);
-  loadMsgs(true);startStream();
+  loadWindow(true);startStream();
 }
 function back(){if(es){es.close();es=null;}$('conv').hidden=true;$('chats').hidden=false;cur=null;
   history.replaceState(null,'',location.pathname+location.search);renderList();}
@@ -295,25 +314,27 @@ window.addEventListener('hashchange',applyHash);
 
 /* ---------- actions ---------- */
 async function send(){
-  const t=$('in'),v=t.value.trim();if(!v||!cur||sending)return;
-  sending=true;$('send').disabled=true;t.value='';t.style.height='auto';setStatus(true);
-  // optimistic echo so your message shows instantly; full() reconciles it against
-  // the server copy on the next load (curData=[] forces a clean rebuild).
-  const M=$('msgs');const echo=document.createElement('div');echo.className='msg user';echo.textContent=v;M.appendChild(echo);M.scrollTop=M.scrollHeight;
-  try{const r=await(await fetch('/api/send',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:cur,text:v})})).json();
+  const sid=cur,t=$('in'),v=t.value.trim();if(!v||!sid||isSending(sid))return;
+  sendingSet.add(sid);saveDraft(sid,'');t.value='';t.style.height='auto';
+  // optimistic echo (only if we're still viewing this chat); loadWindow reconciles on finish
+  if(sid===cur){$('send').disabled=true;setStatus(true);
+    const M=$('msgs');const echo=document.createElement('div');echo.className='msg user';echo.textContent=v;M.appendChild(echo);M.scrollTop=M.scrollHeight;}
+  try{const r=await(await fetch('/api/send',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:sid,text:v})})).json();
     if(!r.ok)alert('send failed: '+r.error);}catch(e){alert(e);}
-  sending=false;$('send').disabled=false;curData=[];loadMsgs(true);
+  sendingSet.delete(sid);
+  if(sid===cur){$('send').disabled=false;loadWindow(true);}
 }
 async function stop(){if(!cur)return;try{await fetch('/api/stop',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:cur})});}catch(e){}}
 
 /* ---------- wiring ---------- */
 $('back').onclick=back;$('send').onclick=send;$('stop').onclick=stop;$('refresh').onclick=loadList;
 $('q').addEventListener('input',renderList);
-$('msgs').addEventListener('scroll',()=>{if($('msgs').scrollTop<40&&!loadingMore&&curStart>0){loadingMore=true;shown+=WIN;loadMsgs(false);}});
-$('in').addEventListener('input',e=>{e.target.style.height='auto';e.target.style.height=Math.min(140,e.target.scrollHeight)+'px';});
+$('msgs').addEventListener('scroll',()=>{if($('msgs').scrollTop<40&&!loadingMore&&curStart>0){loadingMore=true;curStart=Math.max(0,curStart-WIN);loadWindow(false);}});
+$('in').addEventListener('input',e=>{e.target.style.height='auto';e.target.style.height=Math.min(140,e.target.scrollHeight)+'px';if(cur)saveDraft(cur,e.target.value);});
 $('in').addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();send();}});
+try{const cs=JSON.parse(localStorage.getItem('ccb.sessions')||'null');if(cs){sessions=cs;renderList();}}catch(e){}  // instant list from cache
 (async()=>{await loadList();applyHash();})();
-setInterval(loadList,5000);setInterval(()=>{if(!sending)loadMsgs(false);},6000);/* SSE is primary; this is a safety-net fallback */
+setInterval(loadList,5000);setInterval(()=>{if(cur&&!isSending(cur))loadLive();},6000);/* SSE is primary; this is a safety-net fallback */
 </script>
 </body>
 </html>
