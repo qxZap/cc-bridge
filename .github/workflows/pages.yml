@@ -1,9 +1,10 @@
-# Prepared, NOT auto-deploying. Trigger is manual only (workflow_dispatch), so
-# pushing does not publish anything. To go live later: add a `push` trigger and
-# enable Pages (Settings -> Pages -> Source: GitHub Actions) on a public repo.
+# Deploys site/ to GitHub Pages on every push to main (and on manual dispatch).
+# Requires Pages enabled with Source: GitHub Actions (public repo).
 name: Deploy landing page
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:

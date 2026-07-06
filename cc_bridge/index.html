@@ -339,8 +339,9 @@ async function send(){
   const sid=cur,t=$('in'),v=t.value.trim();if(!v||!sid||isSending(sid))return;
   sendingSet.add(sid);saveDraft(sid,'');t.value='';t.style.height='auto';
   // optimistic echo (only if we're still viewing this chat); loadWindow reconciles on finish
-  if(sid===cur){$('send').disabled=true;setStatus(true);
-    const M=$('msgs');const echo=document.createElement('div');echo.className='msg user';echo.textContent=v;M.appendChild(echo);M.scrollTop=M.scrollHeight;}
+  if(sid===cur){$('send').disabled=true;
+    const M=$('msgs');const echo=document.createElement('div');echo.className='msg user';echo.textContent=v;M.appendChild(echo);
+    setStatus(true);M.scrollTop=M.scrollHeight;}   // echo first, THEN the thinking dots go below it
   try{const r=await(await fetch('/api/send',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:sid,text:v})})).json();
     if(!r.ok)alert('send failed: '+r.error);}catch(e){alert(e);}
   sendingSet.delete(sid);
@@ -353,7 +354,13 @@ $('back').onclick=back;$('send').onclick=send;$('stop').onclick=stop;$('refresh'
 $('q').addEventListener('input',renderList);
 $('msgs').addEventListener('scroll',()=>{if($('msgs').scrollTop<40&&!loadingMore&&curStart>0){loadingMore=true;curStart=Math.max(0,curStart-WIN);loadWindow(false);}});
 $('in').addEventListener('input',e=>{e.target.style.height='auto';e.target.style.height=Math.min(140,e.target.scrollHeight)+'px';if(cur)saveDraft(cur,e.target.value);});
-$('in').addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();send();}});
+$('in').addEventListener('keydown',e=>{
+  if(e.key!=='Enter'||e.shiftKey)return;              // Shift+Enter -> newline (default)
+  if(e.ctrlKey||e.metaKey){                            // Ctrl/Cmd+Enter -> newline
+    e.preventDefault();const t=e.target;t.setRangeText('\n',t.selectionStart,t.selectionEnd,'end');t.dispatchEvent(new Event('input'));return;
+  }
+  e.preventDefault();send();                           // Enter -> send
+});
 try{const cs=JSON.parse(localStorage.getItem('ccb.sessions')||'null');if(cs){sessions=cs;renderList();}}catch(e){}  // instant list from cache
 (async()=>{await loadList();applyHash();})();
 setInterval(loadList,5000);setInterval(()=>{if(cur&&!isSending(cur))loadLive();},6000);/* SSE is primary; this is a safety-net fallback */
