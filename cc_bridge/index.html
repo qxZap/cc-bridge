@@ -90,6 +90,16 @@ details.tool[open] .chev{transform:rotate(90deg)}
 details.tool .tname{font-weight:600}
 details.tool pre{margin:0;padding:10px 12px;border-top:1px solid var(--tool-line);
   background:color-mix(in srgb,var(--tool) 60%,#000 8%);overflow:auto;border-radius:0 0 var(--radius) var(--radius)}
+/* AskUserQuestion — render as an answerable card */
+.msg.ask{align-self:flex-start;background:var(--surface);border:1px solid var(--accent);max-width:90%;border-bottom-left-radius:6px;padding:11px 13px}
+.msg.ask .asklbl{font:600 11px/1 ui-monospace,monospace;letter-spacing:.4px;color:var(--accent);margin-bottom:8px}
+.msg.ask .qh{font:600 11px/1 ui-monospace,monospace;letter-spacing:.4px;text-transform:uppercase;color:var(--muted);margin:8px 0 3px}
+.msg.ask .qq{font-weight:600;margin-bottom:8px}
+.qopts{display:flex;flex-direction:column;gap:7px;margin-bottom:4px}
+.qopt{text-align:left;border:1px solid var(--line);background:var(--surface2);border-radius:11px;padding:9px 12px;color:var(--text);display:flex;flex-direction:column;gap:2px;cursor:pointer;transition:.12s;font:inherit}
+.qopt:hover{border-color:var(--accent);transform:translateX(2px)}
+.qopt b{font-size:14px;font-weight:650}
+.qopt span{font-size:12px;color:var(--muted);line-height:1.4}
 /* markdown */
 .md>*:first-child{margin-top:0}.md>*:last-child{margin-bottom:0}
 .md p{margin:.5em 0}.md h1,.md h2,.md h3{margin:.7em 0 .35em;line-height:1.25}
@@ -285,8 +295,31 @@ async function enableNotif(){
   if(notifPerm==='granted'){try{new Notification('cc-bridge',{body:"On — I'll ping you when a turn finishes."});}catch(e){}}
 }
 function sig(m){return m.role+'|'+m.kind+'|'+(m.text||'').length+'|'+(m.detail||'').length;}
+function askCard(m){
+  let data;try{data=JSON.parse(m.detail);}catch(e){}
+  const d=document.createElement('div');
+  if(!data||!Array.isArray(data.questions)){d.className='msg tool '+m.role;d.textContent='🔧 AskUserQuestion';return d;}
+  d.className='msg ask '+m.role;
+  const lbl=document.createElement('div');lbl.className='asklbl';lbl.textContent='❓ the agent is asking';d.appendChild(lbl);
+  data.questions.forEach(q=>{
+    if(q.header){const h=document.createElement('div');h.className='qh';h.textContent=q.header;d.appendChild(h);}
+    const qq=document.createElement('div');qq.className='qq md';qq.innerHTML=md(q.question||'');d.appendChild(qq);
+    const opts=document.createElement('div');opts.className='qopts';
+    (q.options||[]).forEach(o=>{
+      const b=document.createElement('button');b.className='qopt';
+      const nm=document.createElement('b');nm.textContent=o.label;b.appendChild(nm);
+      if(o.description){const s=document.createElement('span');s.textContent=o.description;b.appendChild(s);}
+      b.onclick=()=>answerAsk(o.label);
+      opts.appendChild(b);
+    });
+    d.appendChild(opts);
+  });
+  return d;
+}
+function answerAsk(label){const t=$('in');t.value=label;t.dispatchEvent(new Event('input'));send();}
 function nodeFor(m,gi){
   if(m.kind==='tool'){
+    if(m.text==='AskUserQuestion')return askCard(m);
     const d=document.createElement('details');d.className='msg tool '+m.role;
     if(openTools.has(gi))d.open=true;
     d.innerHTML='<summary><svg class=chev viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=2.4 stroke-linecap=round stroke-linejoin=round><path d="m9 18 6-6-6-6"/></svg><span class=tname></span></summary><pre></pre>';

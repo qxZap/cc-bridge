@@ -157,7 +157,7 @@ def render_messages(sid):
             elif k == "thinking" and it.get("thinking", "").strip():
                 msgs.append({"role": t, "kind": "thinking", "text": it["thinking"]})
             elif k == "tool_use":
-                detail = json.dumps(it.get("input", {}), indent=2)[:4000]
+                detail = json.dumps(it.get("input", {}), indent=2)[:8000]
                 msgs.append({"role": t, "kind": "tool", "text": it.get("name", "?"), "detail": detail})
     with _LOCK:
         _MSGS[path] = (mtime, msgs)
