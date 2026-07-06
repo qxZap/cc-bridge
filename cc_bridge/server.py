@@ -34,6 +34,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 INDEX = os.path.join(HERE, "index.html")
 CLAUDE = shutil.which("claude") or "claude"
 CONFIG = {"permission_mode": "bypassPermissions"}
+# When cc-bridge runs windowless (pythonw / autostart), a child console app would
+# otherwise pop its own terminal window on every turn. Suppress it on Windows.
+NO_WINDOW = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
 
 # mtime-keyed caches so a poll only re-reads transcripts that actually changed.
 _META = {}     # path -> (mtime, (sid, cwd, title))
@@ -177,7 +180,7 @@ def session_cwd(sid):
 def _kill(proc):
     try:
         if os.name == "nt":
-            subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)], capture_output=True)
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)], capture_output=True, creationflags=NO_WINDOW)
         else:
             proc.terminate()
     except Exception:
@@ -200,6 +203,7 @@ def send_turn(sid, text):
         proc = subprocess.Popen(
             [CLAUDE, "--resume", sid, "-p", text, "--permission-mode", CONFIG["permission_mode"]],
             cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            creationflags=NO_WINDOW,
         )
     except Exception as e:
         with _LOCK:
