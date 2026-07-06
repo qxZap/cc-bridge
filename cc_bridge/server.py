@@ -345,13 +345,22 @@ def main():
     args = ap.parse_args()
     CONFIG["permission_mode"] = args.permission_mode
     srv = ThreadingHTTPServer(("0.0.0.0", args.port), H)
-    print("cc-bridge up. open on any LAN/VPN device:")
-    print(f"  http://{lan_ip()}:{args.port}/   (local: http://127.0.0.1:{args.port}/)")
-    print(f"permission-mode: {args.permission_mode}   claude: {CLAUDE}")
+    _say("cc-bridge up. open on any LAN/VPN device:")
+    _say(f"  http://{lan_ip()}:{args.port}/   (local: http://127.0.0.1:{args.port}/)")
+    _say(f"permission-mode: {args.permission_mode}   claude: {CLAUDE}")
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
-        print("\nbye")
+        _say("\nbye")
+
+
+def _say(msg):
+    # pythonw / autostart has no console — stdout is None there, and a bare print
+    # would raise and kill the server before it serves. Swallow that.
+    try:
+        print(msg)
+    except Exception:
+        pass
 
 
 if __name__ == "__main__":

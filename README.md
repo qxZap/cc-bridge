@@ -42,6 +42,19 @@ uv run cc-bridge      # or: python bridge.py      (Windows: double-click start.b
 
 It prints a URL like `http://192.168.1.20:8787/`. Open that on your phone over Wi-Fi/VPN.
 
+### Autostart on login (Windows, optional)
+
+Start it **windowless** one minute after you log in (`pythonw` = no console window; requires `uv tool install` first):
+
+```powershell
+$pw = "$env:APPDATA\uv\tools\cc-bridge\Scripts\pythonw.exe"
+$a  = New-ScheduledTaskAction -Execute $pw -Argument "-m cc_bridge"
+$t  = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME; $t.Delay = "PT1M"
+Register-ScheduledTask -TaskName cc-bridge -Action $a -Trigger $t -Force
+```
+
+Remove with `Unregister-ScheduledTask -TaskName cc-bridge`.
+
 Options:
 
 ```bash
