@@ -71,6 +71,13 @@ There is **no authentication** — bind it only on a LAN/VPN you trust. Exposing
 it to the public internet is on you. Permission mode defaults to
 `bypassPermissions`, so turns you send run tools without prompting.
 
+## Support
+
+cc-bridge is free and MIT-licensed. If it saves you a few walks back to your desk:
+
+- ☕ [Ko-fi](https://ko-fi.com/qxzap)
+- ☕ [Buy Me a Coffee](https://buymeacoffee.com/qxzap)
+
 ## Files
 
 - `cc_bridge/server.py` — stdlib HTTP server + transcript reader + resume runner + SSE.
