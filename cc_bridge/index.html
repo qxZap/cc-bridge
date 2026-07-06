@@ -131,6 +131,22 @@ details.tool pre{margin:0;padding:10px 12px;border-top:1px solid var(--tool-line
 .msg.think,.msg.assistant{animation:fadein .3s ease}
 @keyframes fadein{from{opacity:0;transform:translateY(6px) scale(.99)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){.msg,.spin,.typing span,.typing{animation:none!important}}
+
+/* empty conversation pane (mainly for desktop two-pane) */
+#convempty{position:absolute;inset:0;display:grid;place-items:center;padding:24px;text-align:center;color:var(--faint);background:var(--bg);z-index:3;line-height:1.5}
+.row.on{background:var(--surface2)}
+
+/* ---- desktop: two-pane (list + conversation side by side) ---- */
+@media (min-width:880px){
+  body{display:flex}
+  .screen{position:static;inset:auto;height:100dvh;max-width:none;margin:0}
+  #chats{width:clamp(300px,30vw,400px);flex:none;border-right:1px solid var(--line)}
+  #conv{flex:1;min-width:0;position:relative}
+  #chats[hidden],#conv[hidden]{display:flex!important}   /* ignore the mobile show/hide toggle */
+  #back{display:none}
+  .msg{max-width:700px}
+  #msgs{padding-left:max(16px,4%);padding-right:max(16px,4%)}
+}
 </style>
 </head>
 <body>
@@ -163,6 +179,7 @@ details.tool pre{margin:0;padding:10px 12px;border-top:1px solid var(--tool-line
     <button class=circle id=send title="send"><svg viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7Z"/></svg></button>
     <button class="circle" id=stop title="stop" hidden><svg viewBox="0 0 24 24" fill=currentColor><rect x=6 y=6 width=12 height=12 rx=2/></svg></button>
   </div>
+  <div id=convempty><div><div style="font-size:34px;margin-bottom:8px">💬</div>Pick a chat from the list</div></div>
 </section>
 
 <script>
@@ -227,7 +244,7 @@ function renderList(){
   const rows=sessions.filter(s=>!q||((s.title+' '+s.cwd).toLowerCase().includes(q)));
   if(!rows.length){L.innerHTML='<div class=empty>No chats.</div>';return;}
   for(const s of rows){
-    const r=document.createElement('div');r.className='row';
+    const r=document.createElement('div');r.className='row'+(s.id===cur?' on':'');r.dataset.id=s.id;
     const m=document.createElement('div');m.className='mono';mono(m,s.title);
     const meta=document.createElement('div');meta.className='meta';
     meta.innerHTML='<div class=t></div><div class=c></div>';
@@ -352,15 +369,16 @@ function startStream(){
 function openChat(s){
   cur=s.id;curTitle=s.title;$('ctitle').textContent=s.title;mono($('cmono'),s.title);
   shown=WIN;total=0;curStart=0;nodes=[];lastSig=null;openTools.clear();typingEl=null;typingOn=false;wasWorking=false;$('msgs').innerHTML='';
-  $('chats').hidden=true;$('conv').hidden=false;
+  $('chats').hidden=true;$('conv').hidden=false;$('convempty').hidden=true;
+  document.querySelectorAll('#list .row').forEach(r=>r.classList.toggle('on',r.dataset.id===s.id));
   const t=$('in');t.value=loadDraft(s.id);t.style.height='auto';t.style.height=Math.min(140,t.scrollHeight)+'px';
   const c=cachedMsgs(s.id);if(c)renderWindow(c,true);else showLoading();   // instant paint from snapshot, else a spinner
   $('send').disabled=isSending(s.id);setStatus(s.running||isSending(s.id));setRing(s.ctxpct);
   if(location.hash!=='#'+s.id)history.replaceState(null,'','#'+s.id);
   loadWindow(true);startStream();
 }
-function back(){if(es){es.close();es=null;}$('conv').hidden=true;$('chats').hidden=false;cur=null;
-  history.replaceState(null,'',location.pathname+location.search);renderList();}
+function back(){if(es){es.close();es=null;}$('conv').hidden=true;$('chats').hidden=false;$('convempty').hidden=false;cur=null;
+  setRing(null);history.replaceState(null,'',location.pathname+location.search);renderList();}
 // restore the selected chat on refresh from the URL hash
 function applyHash(){
   const id=location.hash.replace(/^#/,'');
