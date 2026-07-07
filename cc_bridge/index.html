@@ -187,6 +187,7 @@ details.tool pre{margin:0;padding:10px 12px;border-top:1px solid var(--tool-line
     <div class="mono" id=cmono style="width:34px;height:34px;border-radius:10px;font-size:14px"></div>
     <div class=title><div class=n id=ctitle></div><div class=s id=cstatus>idle</div></div>
     <span class=spacer></span>
+    <button class=iconbtn id=arm title="auto-continue when the usage limit resets"><svg viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><path d="M6 2h12M6 22h12M8 2v3.5a4 4 0 0 0 8 0V2M8 22v-3.5a4 4 0 0 1 8 0V22"/></svg></button>
     <div id=ctxwrap title="context used"></div>
   </div>
   <div id=msgs></div>
@@ -290,7 +291,7 @@ async function loadList(){
   try{sessions=await(await fetch('/api/sessions')).json();}catch(e){return;}
   try{localStorage.setItem('ccb.sessions',JSON.stringify(sessions));}catch(e){}
   if(!$('chats').hidden)renderList();
-  if(cur){const s=sessions.find(x=>x.id===cur);setStatus((s&&s.running)||isSending(cur));if(s)setRing(s.ctxpct);}
+  if(cur){const s=sessions.find(x=>x.id===cur);setStatus((s&&s.running)||isSending(cur));if(s){setRing(s.ctxpct);$('arm').classList.toggle('on',!!s.armed);}}
 }
 
 /* ---------- conversation (incremental render) ---------- */
@@ -428,7 +429,7 @@ function openChat(s){
   document.querySelectorAll('#list .row').forEach(r=>r.classList.toggle('on',r.dataset.id===s.id));
   const t=$('in');t.value=loadDraft(s.id);t.style.height='auto';t.style.height=Math.min(140,t.scrollHeight)+'px';
   const c=cachedMsgs(s.id);if(c)renderWindow(c,true);else showLoading();   // instant paint from snapshot, else a spinner
-  $('send').disabled=isSending(s.id);setStatus(s.running||isSending(s.id));setRing(s.ctxpct);
+  $('send').disabled=isSending(s.id);setStatus(s.running||isSending(s.id));setRing(s.ctxpct);$('arm').classList.toggle('on',!!s.armed);
   if(location.hash!=='#'+s.id)history.replaceState(null,'','#'+s.id);
   loadWindow(true);startStream();
 }
@@ -456,10 +457,18 @@ async function send(){
   if(sid===cur){$('send').disabled=false;setStatus(false);loadWindow(true);}
 }
 async function stop(){if(!cur)return;try{await fetch('/api/stop',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:cur})});}catch(e){}}
+async function toggleArm(){
+  if(!cur)return;const on=$('arm').classList.contains('on');
+  try{
+    if(on){await fetch('/api/disarm',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:cur})});$('arm').classList.remove('on');}
+    else{const t=$('in').value.trim();await fetch('/api/arm',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:cur,text:t})});$('arm').classList.add('on');}
+  }catch(e){}
+}
 
 /* ---------- wiring ---------- */
 $('back').onclick=back;$('send').onclick=send;$('stop').onclick=stop;$('refresh').onclick=loadList;
 $('bell').onclick=enableNotif;if(notifPerm==='granted')$('bell').classList.add('on');
+$('arm').onclick=toggleArm;
 $('q').addEventListener('input',renderList);
 $('msgs').addEventListener('scroll',()=>{if($('msgs').scrollTop<40&&!loadingMore&&curStart>0){loadingMore=true;curStart=Math.max(0,curStart-WIN);loadWindow(false);}});
 $('in').addEventListener('input',e=>{e.target.style.height='auto';e.target.style.height=Math.min(140,e.target.scrollHeight)+'px';if(cur)saveDraft(cur,e.target.value);});

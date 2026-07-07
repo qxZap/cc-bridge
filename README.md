@@ -18,6 +18,7 @@ same history — just reachable from the couch.
 - Clean mobile UI: searchable chat list → tap → conversation, light/dark theme.
 - Markdown rendering, collapsible tool calls, infinite scroll.
 - **Favorites** (star chats to pin them), **desktop notifications** on turn completion, per-chat **context-usage ring**.
+- **Auto-continue on limit reset:** arm a chat (⏳) and cc-bridge re-sends a "continue" every ~5 min until your usage limit clears — blocked agents resume on their own, even overnight. Survives restarts.
 - **Project logos:** give a project's chats a custom avatar by adding one line to its `AGENTS.md` — `<!-- logo: assets/logo.png -->` (image path, URL, or an emoji fallback). cc-bridge serves the image; falls back to a title monogram.
 - Zero dependencies (Python standard library only). One command to run.
 

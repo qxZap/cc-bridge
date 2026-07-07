@@ -195,6 +195,7 @@ def list_sessions():
     paths.sort(reverse=True)
     with _LOCK:
         running = set(_RUNNING.keys())
+        armed = set(_ARMED.keys())
     rows = []
     for mtime, p in paths[:40]:
         try:
@@ -211,7 +212,7 @@ def list_sessions():
             rows.append({"id": sid, "cwd": cwd or "?", "title": title,
                          "mtime": mtime, "running": sid in running,
                          "ctx": ctx, "ctxpct": round(100 * ctx / win) if win else 0,
-                         "logo": logo})
+                         "logo": logo, "armed": sid in armed})
         except Exception:
             continue
     return rows
@@ -333,6 +334,76 @@ def stop_session(sid):
     return True, "stopped"
 
 
+# ---- auto-continue on usage-limit reset -------------------------------------
+# Arm a chat and cc-bridge keeps trying to send a "continue" message every few
+# minutes until it goes through — which is the moment your usage limit resets,
+# so a blocked agent picks back up on its own. No clock-time parsing. Persisted
+# across restarts (the autostart server may restart before the reset).
+_ARMED = {}   # sid -> {"text": str, "tries": int}
+ARMED_FILE = os.path.join(HOME, ".claude", "cc-bridge-armed.json")
+ARMED_DEFAULT = "Session limit refreshed. Continue."
+RETRY_EVERY = 300   # seconds between attempts
+RETRY_MAX = 96      # give up after ~8h
+
+
+def _save_armed():
+    try:
+        with _LOCK:
+            data = dict(_ARMED)
+        tmp = ARMED_FILE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+        os.replace(tmp, ARMED_FILE)
+    except Exception:
+        pass
+
+
+def _load_armed():
+    try:
+        with open(ARMED_FILE, encoding="utf-8") as f:
+            d = json.load(f)
+        if isinstance(d, dict):
+            for k, v in d.items():
+                _ARMED[k] = {"text": (v or {}).get("text", ARMED_DEFAULT), "tries": 0}
+    except Exception:
+        pass
+
+
+def arm(sid, text):
+    with _LOCK:
+        _ARMED[sid] = {"text": (text or "").strip() or ARMED_DEFAULT, "tries": 0}
+    _save_armed()
+
+
+def disarm(sid):
+    with _LOCK:
+        _ARMED.pop(sid, None)
+    _save_armed()
+
+
+def _retry_loop():
+    while True:
+        time.sleep(RETRY_EVERY)
+        with _LOCK:
+            items = list(_ARMED.items())
+        for sid, info in items:
+            with _LOCK:
+                busy = sid in _RUNNING
+            if busy:
+                continue
+            ok, out = send_turn(sid, info["text"])
+            if ok:
+                disarm(sid)                      # went through — limit is back
+                continue
+            low = (out or "").lower()
+            limited = any(w in low for w in ("limit", "usage", "rate", "reset", "quota"))
+            info["tries"] += 1
+            if not limited or info["tries"] >= RETRY_MAX:
+                disarm(sid)                      # real error, or gave up
+            else:
+                _save_armed()
+
+
 class H(BaseHTTPRequestHandler):
     def _send(self, body, ctype, code=200):
         # a phone that navigates away mid-poll drops the socket; that's normal,
@@ -439,6 +510,12 @@ class H(BaseHTTPRequestHandler):
         elif u.path == "/api/stop":
             ok, out = stop_session(body.get("id", ""))
             self._json({"ok": ok, "error": None if ok else out})
+        elif u.path == "/api/arm":
+            arm(body.get("id", ""), body.get("text", ""))
+            self._json({"ok": True})
+        elif u.path == "/api/disarm":
+            disarm(body.get("id", ""))
+            self._json({"ok": True})
         else:
             self._json({"error": "not found"}, 404)
 
@@ -460,6 +537,8 @@ def main():
     ap.add_argument("--permission-mode", default="bypassPermissions")
     args = ap.parse_args()
     CONFIG["permission_mode"] = args.permission_mode
+    _load_armed()
+    threading.Thread(target=_retry_loop, daemon=True).start()
     srv = ThreadingHTTPServer(("0.0.0.0", args.port), H)
     _say("cc-bridge up. open on any LAN/VPN device:")
     _say(f"  http://{lan_ip()}:{args.port}/   (local: http://127.0.0.1:{args.port}/)")
